@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: temp-predictor-api
+  labels:
+    app: temp-predictor-api
+spec:
+  type: ClusterIP
+  selector:
+    app: temp-predictor-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
