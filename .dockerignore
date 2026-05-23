@@ -1,0 +1,22 @@
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+.git/
+.github/
+.idea/
+.vscode/
+.DS_Store
+
+# Datasets are regenerated in CI; never bake them into images.
+data/
+
+# README/docs are not needed at runtime.
+README.md
+*.md

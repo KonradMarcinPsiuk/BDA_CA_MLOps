@@ -1,0 +1,79 @@
+name: Train
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "main.py"
+      - "requirements-train.txt"
+      - "Dockerfile.train"
+      - ".github/workflows/train.yml"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Days of history to fetch"
+        type: string
+        default: "120"
+  workflow_call:
+    inputs:
+      days:
+        type: string
+        default: "120"
+    outputs:
+      artifact_name:
+        description: "Name of the uploaded model artifact"
+        value: ${{ jobs.train.outputs.artifact_name }}
+
+jobs:
+  train:
+    name: Train Dublin model
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.set-artifact.outputs.name }}
+    env:
+      DAYS: ${{ inputs.days || '120' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build trainer image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.train
+          load: true
+          tags: temp-predictor-trainer:${{ github.sha }}
+          cache-from: type=gha,scope=trainer
+          cache-to: type=gha,mode=max,scope=trainer
+
+      - name: Run training container
+        run: |
+          mkdir -p models data
+          docker run --rm \
+            -v "${{ github.workspace }}/models:/app/models" \
+            -v "${{ github.workspace }}/data:/app/data" \
+            temp-predictor-trainer:${{ github.sha }} \
+            --days "$DAYS" \
+            | tee train.log
+
+      - name: Set artifact name
+        id: set-artifact
+        run: echo "name=model-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.set-artifact.outputs.name }}
+          path: models/ridge.joblib
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload training log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: train-log-${{ github.sha }}
+          path: train.log
+          if-no-files-found: warn

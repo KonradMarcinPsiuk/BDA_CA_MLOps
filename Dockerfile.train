@@ -1,0 +1,21 @@
+FROM python:3.11-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY requirements-train.txt ./
+RUN pip install -r requirements-train.txt
+
+COPY main.py ./
+COPY src ./src
+
+RUN mkdir -p /app/data /app/models
+
+ENV DAYS=120
+
+ENTRYPOINT ["python", "main.py"]
+CMD ["--days", "120"]
