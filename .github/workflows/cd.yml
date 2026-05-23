@@ -18,8 +18,8 @@ on:
         default: ""
 
 permissions:
-  contents: read
-  packages: write
+  contents: write   # needs write to commit the new image tag back to main
+  packages: write   # needs write to push the image to GHCR
   actions: read
 
 env:
@@ -27,14 +27,17 @@ env:
   IMAGE_NAME: ${{ github.repository }}/temp-predictor-api
 
 jobs:
-  deploy:
-    name: Build, push & deploy API
+  build-and-promote:
+    name: Build, push & bump image tag
     runs-on: ubuntu-latest
     if: >-
       github.event_name != 'workflow_run'
       || github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Resolve source run id & short sha
         id: src
@@ -100,33 +103,32 @@ jobs:
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
-      - name: Set up Kind cluster
-        uses: helm/kind-action@v1
-        with:
-          cluster_name: temp-predictor
-          wait: 120s
-
-      - name: Create GHCR pull secret in cluster
+      - name: Install kustomize
         run: |
-          kubectl create secret docker-registry ghcr-pull \
-            --docker-server=${REGISTRY} \
-            --docker-username=${{ github.actor }} \
-            --docker-password=${{ secrets.GITHUB_TOKEN }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz" \
+            | tar xz
+          sudo mv kustomize /usr/local/bin/kustomize
+          kustomize version
 
-      - name: Deploy to Kind
+      - name: Bump image tag in k8s/kustomization.yaml
+        working-directory: k8s
         env:
-          IMAGE: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
+          IMAGE_REF: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
         run: |
-          sed "s|__IMAGE__|${IMAGE}|g" k8s/deployment.yaml | kubectl apply -f -
-          kubectl apply -f k8s/service.yaml
-          kubectl rollout status deployment/temp-predictor-api --timeout=180s
+          kustomize edit set image "temp-predictor-api=${IMAGE_REF}"
+          echo "--- kustomization.yaml after edit ---"
+          cat kustomization.yaml
 
-      - name: Smoke test (port-forward + /health)
+      - name: Commit & push manifest change
+        env:
+          IMAGE_REF: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
         run: |
-          kubectl port-forward svc/temp-predictor-api 8000:80 &
-          PF_PID=$!
-          sleep 5
-          curl -fsS http://127.0.0.1:8000/health
-          curl -fsS "http://127.0.0.1:8000/predict?days=90" || true
-          kill $PF_PID || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet k8s/kustomization.yaml; then
+            echo "No manifest change to commit (same image tag)."
+            exit 0
+          fi
+          git add k8s/kustomization.yaml
+          git commit -m "ci: bump api image to ${IMAGE_REF}"
+          git push origin HEAD:${{ github.ref_name || 'main' }}
