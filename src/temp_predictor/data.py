@@ -12,6 +12,12 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+import urllib3.util.connection as urllib3_cn
+
+# Containers (Docker bridge networking, Docker Desktop's Linux VM, and
+# GitHub-hosted runners) get AAAA records back from DNS but typically have
+# no IPv6 route, so requests fail with ENETUNREACH. Force IPv4 resolution.
+urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
