@@ -6,7 +6,6 @@ import pandas as pd
 LAGS: tuple[int, ...] = (1, 2, 3, 7)
 ROLLING_WINDOW = 7
 
-
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add lag and rolling-mean features.
 
