@@ -9,4 +9,4 @@ resources:
 images:
 - name: temp-predictor-api
   newName: ghcr.io/konradmarcinpsiuk/bda_ca_mlops/temp-predictor-api
-  newTag: 30fd34e
+  newTag: "9387085"
