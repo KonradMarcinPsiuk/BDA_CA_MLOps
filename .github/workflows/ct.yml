@@ -1,0 +1,32 @@
+name: Continuous Training
+
+on:
+  schedule:
+    # Mondays 06:00 UTC — fresh weather window each week.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Days of history to fetch"
+        type: string
+        default: "180"
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+jobs:
+  retrain:
+    name: Retrain model
+    uses: ./.github/workflows/train.yml
+    with:
+      days: ${{ inputs.days || '180' }}
+
+  redeploy:
+    name: Promote new model
+    needs: retrain
+    uses: ./.github/workflows/cd.yml
+    with:
+      run_id: ${{ github.run_id }}
+    secrets: inherit

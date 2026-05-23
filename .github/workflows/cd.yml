@@ -1,0 +1,132 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["Train"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Optional Train workflow run id to pull the model from"
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      run_id:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/temp-predictor-api
+
+jobs:
+  deploy:
+    name: Build, push & deploy API
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'workflow_run'
+      || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve source run id & short sha
+        id: src
+        env:
+          EVENT: ${{ github.event_name }}
+          WR_ID: ${{ github.event.workflow_run.id }}
+          WR_SHA: ${{ github.event.workflow_run.head_sha }}
+          IN_RUN_ID: ${{ inputs.run_id }}
+          FALLBACK_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = "workflow_run" ]; then
+            echo "run_id=$WR_ID" >> "$GITHUB_OUTPUT"
+            echo "short_sha=${WR_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          elif [ -n "$IN_RUN_ID" ]; then
+            echo "run_id=$IN_RUN_ID" >> "$GITHUB_OUTPUT"
+            echo "short_sha=${FALLBACK_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Need either a workflow_run trigger or an explicit run_id input."
+            exit 1
+          fi
+
+      - name: Download model artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: model-${{ steps.src.outputs.short_sha }}
+          path: models
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.src.outputs.run_id }}
+
+      - name: Fail if no model present
+        run: |
+          if ! ls models/ridge.joblib >/dev/null 2>&1; then
+            echo "::error::No model artifact found — run Train first."
+            exit 1
+          fi
+          ls -la models/
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          repo_lower="${IMAGE_NAME,,}"
+          echo "image=${REGISTRY}/${repo_lower}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.image }}:latest
+            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Set up Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: temp-predictor
+          wait: 120s
+
+      - name: Create GHCR pull secret in cluster
+        run: |
+          kubectl create secret docker-registry ghcr-pull \
+            --docker-server=${REGISTRY} \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Kind
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.sha_tag }}
+        run: |
+          sed "s|__IMAGE__|${IMAGE}|g" k8s/deployment.yaml | kubectl apply -f -
+          kubectl apply -f k8s/service.yaml
+          kubectl rollout status deployment/temp-predictor-api --timeout=180s
+
+      - name: Smoke test (port-forward + /health)
+        run: |
+          kubectl port-forward svc/temp-predictor-api 8000:80 &
+          PF_PID=$!
+          sleep 5
+          curl -fsS http://127.0.0.1:8000/health
+          curl -fsS "http://127.0.0.1:8000/predict?days=90" || true
+          kill $PF_PID || true

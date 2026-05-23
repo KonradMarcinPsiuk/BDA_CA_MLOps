@@ -28,7 +28,7 @@ on:
 jobs:
   train:
     name: Train Dublin model
-    runs-on: [self-hosted, mlops-runner]
+    runs-on: ubuntu-latest
     outputs:
       artifact_name: ${{ steps.set-artifact.outputs.name }}
     env:
