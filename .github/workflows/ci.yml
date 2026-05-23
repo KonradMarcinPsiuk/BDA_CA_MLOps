@@ -3,10 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches:
-      - "feature/**"
-      - "fix/**"
+  workflow_dispatch:
+
 
 jobs:
   lint-and-test:
