@@ -49,14 +49,24 @@ jobs:
           cache-to: type=gha,mode=max,scope=trainer
 
       - name: Run training container
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p models data
           docker run --rm \
             -v "${{ github.workspace }}/models:/app/models" \
             -v "${{ github.workspace }}/data:/app/data" \
             temp-predictor-trainer:${{ github.sha }} \
             --days "$DAYS" \
-            | tee train.log
+            2>&1 | tee train.log
+          echo "--- models/ after training ---"
+          ls -la models/
+
+      - name: Verify model artifact exists
+        run: |
+          [ -f models/ridge.joblib ] \
+            || { echo "::error::Training produced no model at models/ridge.joblib."; exit 1; }
+          ls -lh models/ridge.joblib
 
       - name: Set artifact name
         id: set-artifact
