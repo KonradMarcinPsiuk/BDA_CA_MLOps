@@ -18,8 +18,8 @@ on:
         default: ""
 
 permissions:
-  contents: write   # needs write to commit the new image tag back to main
-  packages: write   # needs write to push the image to GHCR
+  contents: write
+  packages: write
   actions: read
 
 env:
