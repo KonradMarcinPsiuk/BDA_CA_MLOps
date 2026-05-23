@@ -12,11 +12,6 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-import urllib3.util.connection as urllib3_cn
-
-# Some CI runners (incl. GitHub-hosted Linux) advertise IPv6 in DNS but have
-# no IPv6 route, which makes requests fail with ENETUNREACH. Force v4.
-urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
