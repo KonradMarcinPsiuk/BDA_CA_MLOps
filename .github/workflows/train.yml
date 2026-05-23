@@ -54,6 +54,7 @@ jobs:
           set -euo pipefail
           mkdir -p models data
           docker run --rm \
+            --network=host \
             -v "${{ github.workspace }}/models:/app/models" \
             -v "${{ github.workspace }}/data:/app/data" \
             temp-predictor-trainer:${{ github.sha }} \
