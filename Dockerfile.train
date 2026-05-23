@@ -15,7 +15,5 @@ COPY src ./src
 
 RUN mkdir -p /app/data /app/models
 
-ENV DAYS=120
-
 ENTRYPOINT ["python", "main.py"]
-CMD ["--days", "120"]
+CMD ["--days", "90"]

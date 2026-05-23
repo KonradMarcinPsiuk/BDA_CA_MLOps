@@ -24,8 +24,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--days",
         type=int,
-        default=120,
-        help="Number of historical days to fetch (default: 120).",
+        default=90,
+        help="Number of historical days to fetch (max 92, default: 90).",
     )
     parser.add_argument(
         "--skip-train",
