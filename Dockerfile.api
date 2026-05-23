@@ -1,0 +1,24 @@
+FROM python:3.11-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY requirements-serve.txt ./
+RUN pip install -r requirements-serve.txt
+
+COPY src ./src
+
+# Model artefact(s) baked in at image build time.
+# The CD workflow downloads the trained .joblib(s) into ./models before docker build.
+COPY models ./models
+
+ENV MODEL_DIR=/app/models \
+    PORT=8000
+
+EXPOSE 8000
+
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8000", "--timeout", "60", "src.temp_predictor.api:app"]
