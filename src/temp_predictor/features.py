@@ -1,5 +1,3 @@
-"""Feature engineering for temperature time series."""
-
 from __future__ import annotations
 
 import numpy as np
