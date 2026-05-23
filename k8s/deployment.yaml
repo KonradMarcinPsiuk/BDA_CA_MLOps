@@ -14,8 +14,6 @@ spec:
       labels:
         app: temp-predictor-api
     spec:
-      imagePullSecrets:
-        - name: ghcr-pull
       containers:
         - name: api
           image: temp-predictor-api
