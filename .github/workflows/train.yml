@@ -48,6 +48,25 @@ jobs:
           cache-from: type=gha,scope=trainer
           cache-to: type=gha,mode=max,scope=trainer
 
+      - name: Network diagnostic
+        shell: bash
+        run: |
+          echo "=== Host: can the runner itself reach Open-Meteo? ==="
+          curl -4 -sS -o /dev/null -w "HOST  HTTP %{http_code}  total %{time_total}s\n" \
+            --max-time 15 https://archive-api.open-meteo.com/v1/archive || echo "HOST failed"
+    
+          echo ""
+          echo "=== Container (bridge): can the container reach Open-Meteo? ==="
+          docker run --rm curlimages/curl:latest \
+            -4 -sS -o /dev/null -w "CONT(bridge)  HTTP %{http_code}  total %{time_total}s\n" \
+            --max-time 15 https://archive-api.open-meteo.com/v1/archive || echo "CONT bridge failed"
+    
+          echo ""
+          echo "=== Container (host network): same test with --network=host ==="
+          docker run --rm --network=host curlimages/curl:latest \
+            -4 -sS -o /dev/null -w "CONT(host)  HTTP %{http_code}  total %{time_total}s\n" \
+            --max-time 15 https://archive-api.open-meteo.com/v1/archive || echo "CONT host failed"
+
       - name: Run training container
         shell: bash
         run: |
